@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>로또 1등 당첨번호 통계</title>
+<style>
+  :root{
+    --bg:#f4f5f7;
+    --card:#ffffff;
+    --text:#1f2430;
+    --sub:#7a7f8c;
+    --border:#e7e8ec;
+    --accent:#4f6df5;
+    --yellow:#fbc400;
+    --blue:#69c8f2;
+    --red:#ff7272;
+    --gray:#aaaaaa;
+    --green:#b0d840;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",-apple-system,BlinkMacSystemFont,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:760px;margin:0 auto;}
+  header{text-align:center;margin-bottom:24px;}
+  header h1{font-size:26px;margin:0 0 6px;letter-spacing:-0.3px;}
+  header p{margin:0;color:var(--sub);font-size:14px;}
+
+  .infobar{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:18px 20px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:16px;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:20px;
+  }
+  .infobar .stats{display:flex;gap:24px;flex-wrap:wrap;}
+  .stat{text-align:left;}
+  .stat .label{font-size:12px;color:var(--sub);margin-bottom:2px;}
+  .stat .value{font-size:15px;font-weight:700;}
+  #updateBtn{
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:10px;
+    padding:11px 20px;
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+    transition:opacity .15s;
+  }
+  #updateBtn:hover{opacity:.9;}
+  #updateBtn:disabled{opacity:.6;cursor:default;}
+  #statusMsg{font-size:12px;color:var(--sub);margin:6px 2px 18px;min-height:16px;text-align:center;}
+  #statusMsg.error{color:#e0433f;}
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    overflow:hidden;
+  }
+  thead th{
+    background:#fafbfc;
+    font-size:12px;
+    color:var(--sub);
+    text-align:left;
+    padding:12px 14px;
+    border-bottom:1px solid var(--border);
+    font-weight:600;
+  }
+  tbody td{
+    padding:10px 14px;
+    border-bottom:1px solid var(--border);
+    font-size:14px;
+    vertical-align:middle;
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#fafbfe;}
+  td.rank{width:52px;color:var(--sub);font-weight:700;font-size:13px;}
+  td.count{font-weight:700;}
+  td.pct{color:var(--sub);font-size:13px;}
+
+  .ball{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:32px;height:32px;
+    border-radius:50%;
+    color:#fff;
+    font-weight:700;
+    font-size:13px;
+    box-shadow:inset 0 -2px 3px rgba(0,0,0,.15);
+  }
+  .b-yellow{background:var(--yellow);color:#5a4400;}
+  .b-blue{background:var(--blue);}
+  .b-red{background:var(--red);}
+  .b-gray{background:var(--gray);}
+  .b-green{background:var(--green);color:#3d4a00;}
+
+  .barbg{
+    background:#eef0f5;
+    border-radius:6px;
+    height:6px;
+    margin-top:6px;
+    width:100%;
+    overflow:hidden;
+  }
+  .barfill{
+    height:100%;
+    background:var(--accent);
+    border-radius:6px;
+  }
+  footer{
+    text-align:center;
+    color:var(--sub);
+    font-size:12px;
+    margin-top:20px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🎱 로또 1등 당첨번호 통계</h1>
+    <p>1회부터 최신 회차까지, 1등 당첨번호 6자리 기준 번호별 출현 빈도</p>
+  </header>
+
+  <div class="infobar">
+    <div class="stats">
+      <div class="stat">
+        <div class="label">분석 회차</div>
+        <div class="value" id="drawRange">-</div>
+      </div>
+      <div class="stat">
+        <div class="label">총 분석 회차 수</div>
+        <div class="value" id="totalDraws">-</div>
+      </div>
+      <div class="stat">
+        <div class="label">최근 업데이트</div>
+        <div class="value" id="updatedAt">-</div>
+      </div>
+    </div>
+    <button id="updateBtn">업데이트</button>
+  </div>
+  <div id="statusMsg"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>순위</th>
+        <th>번호</th>
+        <th>출현 횟수</th>
+        <th>출현율</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <footer>데이터 출처: 동행복권 로또6/45 1등 당첨번호 전체 이력 (smok95/lotto 공개 데이터셋) · 6자리 당첨번호 기준, 보너스 번호 제외</footer>
+</div>
+
+<script>
+const DATA_URL = "https://smok95.github.io/lotto/results/all.json";
+
+// 최초 화면(오프라인/네트워크 실패 대비) 표시용 캐시 데이터 - 1회~1236회(2026-08-08) 기준
+const FALLBACK = {
+  firstDraw: 1,
+  lastDraw: 1236,
+  lastDate: "2026-08-08",
+  totalDraws: 1236,
+  freq: {"1":170,"2":155,"3":172,"4":162,"5":153,"6":166,"7":170,"8":158,"9":136,"10":161,
+  "11":166,"12":180,"13":179,"14":172,"15":170,"16":168,"17":171,"18":177,"19":170,"20":170,
+  "21":167,"22":145,"23":147,"24":166,"25":153,"26":165,"27":181,"28":157,"29":156,"30":158,
+  "31":169,"32":144,"33":174,"34":185,"35":163,"36":164,"37":173,"38":171,"39":168,"40":173,
+  "41":150,"42":157,"43":165,"44":164,"45":175}
+};
+
+function ballClass(n){
+  if(n<=10) return "b-yellow";
+  if(n<=20) return "b-blue";
+  if(n<=30) return "b-red";
+  if(n<=40) return "b-gray";
+  return "b-green";
+}
+
+function render(state){
+  const {firstDraw,lastDraw,lastDate,totalDraws,freq} = state;
+  document.getElementById("drawRange").textContent = firstDraw + "회 ~ " + lastDraw + "회 (" + lastDate + ")";
+  document.getElementById("totalDraws").textContent = totalDraws.toLocaleString() + "회";
+  document.getElementById("updatedAt").textContent = new Date().toLocaleString("ko-KR");
+
+  const entries = Object.entries(freq).map(([num,cnt]) => [Number(num), cnt]);
+  entries.sort((a,b) => b[1]-a[1] || a[0]-b[0]);
+  const maxCount = entries[0][1];
+
+  const rows = entries.map(([num,cnt], idx) => {
+    const pct = ((cnt/totalDraws)*100).toFixed(1);
+    const barPct = ((cnt/maxCount)*100).toFixed(0);
+    return `<tr>
+      <td class="rank">${idx+1}</td>
+      <td><span class="ball ${ballClass(num)}">${num}</span></td>
+      <td class="count">${cnt}회
+        <div class="barbg"><div class="barfill" style="width:${barPct}%"></div></div>
+      </td>
+      <td class="pct">${pct}%</td>
+    </tr>`;
+  }).join("");
+  document.getElementById("tableBody").innerHTML = rows;
+}
+
+function computeFreq(draws){
+  const freq = {};
+  for(let i=1;i<=45;i++) freq[i]=0;
+  for(const d of draws){
+    for(const n of d.numbers) freq[n]++;
+  }
+  return freq;
+}
+
+async function updateData(){
+  const btn = document.getElementById("updateBtn");
+  const status = document.getElementById("statusMsg");
+  btn.disabled = true;
+  btn.textContent = "업데이트 중...";
+  status.textContent = "";
+  status.classList.remove("error");
+  try{
+    const res = await fetch(DATA_URL, {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const draws = await res.json();
+    draws.sort((a,b) => a.draw_no - b.draw_no);
+    const freq = computeFreq(draws);
+    const last = draws[draws.length-1];
+    render({
+      firstDraw: draws[0].draw_no,
+      lastDraw: last.draw_no,
+      lastDate: last.date.slice(0,10),
+      totalDraws: draws.length,
+      freq
+    });
+    status.textContent = last.draw_no + "회까지 반영 완료";
+  }catch(err){
+    render(FALLBACK);
+    status.textContent = "최신 데이터를 불러오지 못해 캐시된 데이터를 표시합니다 (" + err.message + ")";
+    status.classList.add("error");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "업데이트";
+  }
+}
+
+document.getElementById("updateBtn").addEventListener("click", updateData);
+
+// 최초 진입 시 캐시 데이터로 즉시 표시 후, 최신 데이터로 자동 갱신
+render(FALLBACK);
+updateData();
+</script>
+</body>
+</html>
